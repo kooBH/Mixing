@@ -1,0 +1,28 @@
+data : 
+  #speech : ["/home/data2/kbh/DNS-Challenge/datasets_fullband/clean_fullband/"]
+  speech : ["/home/nas/DB/CHiME4/data/audio/16kHz/isolated/tr05_org/"]
+  noise : []
+---
+audio :
+  n_channel : 4
+  sr : 16000
+
+---
+RIR : 
+  mic_type : ["linear", "square", "cross"]
+  mic_min_dist : 0.02
+  mic_max_dist : 0.06
+  rgn_RT60 : [0.1,0.7]
+---
+mix : 
+  sec : 5
+  n_src : 1
+  use_noise : False
+  max_SIR  : 10
+  scale_dB : -35
+---
+dataset : 
+  multiple_train : 100
+  ratio_train : 0.9
+  ratio_dev : 0.05
+  ratio_eval : 0.05
