@@ -102,8 +102,8 @@ def sample_audio(x,n_sample) :
         x = np.pad(x,(0,shortage))
         return x, -1
     else :
-        need = L - n_sample
-        start = np.random.randint(0,need)
+        left = L - n_sample
+        start = np.random.randint(0,left)
         x = x[start:start+n_sample]
         return x, start
 

@@ -29,7 +29,6 @@ parser.add_argument('--room', '-r', type=str, required=True)
 parser.add_argument('--n_data', '-n', type=int, required=True)
 
 args = parser.parse_args()
-
 hp = HParam(args.config,args.default)
 hp_mic = HParam(args.mic)
 hp_room= HParam(args.room)
@@ -61,13 +60,14 @@ def process(idx):
     signals = []
     #Speeches
     for i in range(n_src) : 
-        idx = np.random.randint(0,len(list_speech))
-        raw = rs.load(list_speech[idx],sr=hp.audio.sr)[0]
+        idx_src = np.random.randint(0,len(list_speech))
+        raw = rs.load(list_speech[idx_src],sr=hp.audio.sr)[0]
         raw,idx_start = sample_audio(raw,n_sample)
 
         # RIR
         raw = np.expand_dims(raw,0)
         signal = scipy.signal.convolve(raw,RIRs[i])
+        signal = signal[:,:n_sample]
 
         SIR = np.random.uniform(0,max_SIR)
 
@@ -114,6 +114,7 @@ def process(idx):
     with open(path_label,'w') as f:
         json.dump(label,f,indent=4)
 
+
     path_noisy= os.path.join(output_root,"noisy","{}.wav".format(idx))
     sf.write(path_noisy,x.T,sr)
 
@@ -124,7 +125,7 @@ def process(idx):
     
 
 if __name__=='__main__': 
-    cpu_num = cpu_count()
+    cpu_num = int(cpu_count()/2)
 
     for subdir in ["label","noisy","clean"] : 
         os.makedirs(os.path.join(output_root,subdir),exist_ok=True)
