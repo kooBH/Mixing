@@ -3,13 +3,13 @@ import numpy as np
 import sys,os
 sys.path.append("../gpuRIR")
 
-def sample_mic_pos(pool):
+def sample_mic_pos(pool,shuffle_channel = False):
     # sample
     idx =  np.random.randint(0,len(pool))
     mic_pos = pool[idx]
 
-    # shuffle channel
-    np.random.shuffle(mic_pos)
+    if shuffle_channel :
+        np.random.shuffle(mic_pos)
 
     return mic_pos
 
@@ -17,7 +17,8 @@ def sample_space(pool_room,
                  dist_min=0.5,
                  height_min=1.0,
                  height_max=2.5,
-                 n_src = 2
+                 n_src = 2,
+                 angle_resolution = 15
                  ):
     # sample
     idx =  np.random.randint(0,len(pool_room))
@@ -25,14 +26,14 @@ def sample_space(pool_room,
     center = room/2
     center[2] = height_min
 
-    # TODO : rand on mic pos
+    # TODO : random noise on mic pos
 
     pt_mic = center
 
     dist_max = min(center[:2])-dist_min
 
     pt_src = []
-    pool_angle = np.arange(0,360,15)
+    pool_angle = np.arange(0,360,angle_resolution)
     angle = np.random.choice(pool_angle, n_src,replace=False)
     
     for i in range(n_src):

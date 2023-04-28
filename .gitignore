@@ -131,3 +131,5 @@ dmypy.json
 
 *.wav
 *.html
+
+*.yaml

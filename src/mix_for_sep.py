@@ -18,6 +18,7 @@ warnings.filterwarnings('ignore')
 
 from utils.hparams import HParam
 from modules.mixer import sample_mic_pos,sample_space,gen_RIR,sample_audio
+from modules.align import align
 
 # param
 parser = argparse.ArgumentParser()
@@ -50,14 +51,16 @@ for path in hp.data.speech:
 print("speech : {}".format(len(list_speech)))
 
 def process(idx):
+    np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
     # RIR
     mic_pos = sample_mic_pos(hp_mic["array"])
-    room,pt_mic, pt_srcs,angles = sample_space(hp_room["sz"],n_src = n_src)
+    room,pt_mic, pt_srcs,angles = sample_space(hp_room["sz"],n_src = n_src,angle_resolution=hp.RIR.angle_resolution)
     RIRs, RT60 = gen_RIR(hp.RIR.rgn_RT60, mic_pos, room,pt_mic,pt_srcs)
     #print("angle : {} | RT60 : {:.2f} | RIR : {}".format(angles,RT60,RIRs))
 
     # Mixing 
     signals = []
+    raws = []
     #Speeches
     for i in range(n_src) : 
         idx_src = np.random.randint(0,len(list_speech))
@@ -69,6 +72,8 @@ def process(idx):
         signal = scipy.signal.convolve(raw,RIRs[i])
         signal = signal[:,:n_sample]
 
+        raw = align(raw,signal)
+
         SIR = np.random.uniform(0,max_SIR)
 
         # Scaling : first src as reference
@@ -76,11 +81,14 @@ def process(idx):
             sig_rms = np.sqrt(np.mean(signal**2))
             snr_scaler = ref_rms / (10 ** (SIR/20)) / (sig_rms + 1e-13)
             signal *= snr_scaler
+            raw *= snr_scaler
         else : 
             ref_rms = np.sqrt(np.mean(signal**2))
 
         signals.append(signal)
+        raws.append(raw)
     signals = np.array(signals)
+    raws = np.array(raws)
 
     # Mix
     x = np.sum(signals,axis=0)
@@ -91,12 +99,17 @@ def process(idx):
     scalar = 10 ** (scale_dB / 20) / (rms + 1e-13)
     x *= scalar
     signals*= scalar
+    raws *= scalar
 
     # clip
     if np.any(np.abs(x) > 0.999)  : 
         noisy_scalar = np.max(np.abs(x)) / (0.99 - 1e-13)  # same as divide by 1
         x /= noisy_scalar
         signals /= noisy_scalar
+
+    if np.any(np.abs(raws) > 0.999)  : 
+        noisy_scalar = np.max(np.abs(raws)) / (0.99 - 1e-13)  # same as divide by 1
+        raws /= noisy_scalar
 
     # Label
     label = {}
@@ -109,18 +122,19 @@ def process(idx):
     label["scale_dB"] = scale_dB
 
     # Save
-
     path_label = os.path.join(output_root,"label","{}.json".format(idx))
     with open(path_label,'w') as f:
         json.dump(label,f,indent=4)
-
 
     path_noisy= os.path.join(output_root,"noisy","{}.wav".format(idx))
     sf.write(path_noisy,x.T,sr)
 
     for i in range(n_src) : 
         path_clean = os.path.join(output_root,"clean","{}_{}.wav".format(idx,i))
-        sf.write(path_clean,signals[i,0].T,sr)
+        if hp.mix.unreverbed_clean : 
+            sf.write(path_clean,raws[i,0].T,sr)
+        else :
+            sf.write(path_clean,signals[i,0].T,sr)
 
     
 
