@@ -8,14 +8,11 @@ audio :
   sr : 16000
 ---
 RIR : 
-  mic_min_dist : 0.02
-  mic_max_dist : 0.06
-  rgn_RT60 : [0.1,0.7]
-  angle_resolution : 15
+  root : "/home/data2/kbh/RIR_UMA8"
 ---
 mix : 
   sec : 5
-  n_src : 1
+  n_src : 2
   use_noise : False
   max_SIR  : 10
   scale_dB : -35
