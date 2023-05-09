@@ -1,11 +1,11 @@
-import os, glob
+import os,glob
 import argparse
-
+import scipy
 import numpy as np
 import librosa as rs
 import soundfile as sf
-import scipy.signal
-
+from scipy import io
+import random
 import json
 
 # utils
@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from utils.hparams import HParam
-from modules.mixer import sample_mic_pos,sample_space,gen_RIR,sample_audio
+from modules.mixer import sample_audio
 from modules.align import align
 
 # param
@@ -25,18 +25,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--output_root', '-o', type=str, required=True)
 parser.add_argument('--config', '-c', type=str, required=True)
 parser.add_argument('--default', '-d', type=str, required=True)
-parser.add_argument('--mic', '-m', type=str, required=True)
-parser.add_argument('--room', '-r', type=str, required=True)
 parser.add_argument('--n_data', '-n', type=int, required=True)
 
 args = parser.parse_args()
 hp = HParam(args.config,args.default)
-hp_mic = HParam(args.mic)
-hp_room= HParam(args.room)
 
 ## ROOT
 output_root = args.output_root
-
 n_data = args.n_data
 
 list_speech = []
@@ -45,33 +40,45 @@ n_src = hp.mix.n_src
 max_SIR = hp.mix.max_SIR
 min_scale_dB = hp.mix.scale_dB
 sr = hp.audio.sr
+n_ch = hp.audio.n_channel
 
 for path in hp.data.speech:
     list_speech += glob.glob(os.path.join(path,"**","*.wav"),recursive=True)
 print("speech : {}".format(len(list_speech)))
 
+list_RIR = glob.glob(os.path.join(hp.RIR.root,"*.mat"),recursive=True)
+print("RIR : {}".format(len(list_RIR)))
+
 def process(idx):
     np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
-    # RIR
-    mic_pos = sample_mic_pos(hp_mic["array"])
-    room,pt_mic, pt_srcs,angles = sample_space(hp_room["sz"],n_src = n_src,angle_resolution=hp.RIR.angle_resolution)
-    RIRs, RT60 = gen_RIR(hp.RIR.rgn_RT60, mic_pos, room,pt_mic,pt_srcs)
-    #print("angle : {} | RT60 : {:.2f} | RIR : {}".format(angles,RT60,RIRs))
+    
+    ## RIR
+    # select angles
+    idx_angles = np.random.choice(len(range(0,360,15)),n_src,replace=False)
 
     # Mixing 
     signals = []
     raws = []
     #Speeches
     for i in range(n_src) : 
+        # (n_RIR,n_ch) == (65536,7)
+        RIR = io.loadmat(list_RIR[idx_angles[i]])["ir"]
+        # TODO : select cross part of UMA-8
+        RIR = RIR[:,[2,3,5,6]]
+
         idx_src = np.random.randint(0,len(list_speech))
         raw = rs.load(list_speech[idx_src],sr=hp.audio.sr)[0]
         raw,idx_start = sample_audio(raw,n_sample)
 
         # RIR
-        raw = np.expand_dims(raw,0)
-        signal = scipy.signal.convolve(raw,RIRs[i])
-        signal = signal[:,:n_sample]
+        signal = []
+        for j in range(n_ch) : 
+            s = scipy.signal.convolve(raw,RIR[:,j])
+            s = s[:n_sample]
+            signal.append(s)
+        signal = np.array(signal)
 
+        raw = np.expand_dims(raw,0)
         raw = align(raw,signal)
 
         SIR = np.random.uniform(0,max_SIR)
@@ -111,13 +118,19 @@ def process(idx):
         noisy_scalar = np.max(np.abs(raws)) / (0.99 - 1e-13)  # same as divide by 1
         raws /= noisy_scalar
 
+
     # Label
+    angles = idx_angles * 15
+
     label = {}
-    label["room"] = room.tolist()
-    label["mic_pos"] = mic_pos
-    label["pt_mic"] = pt_mic.tolist()
-    label["pt_srcs"] = np.array(pt_srcs).tolist()
     label["angles"] = angles.tolist()
+    # 3,4,6,7 channels of UMA8
+    label["mic_pos"] = [
+   [0.0372,    0.0215,         0],
+   [ 0.0372,  -0.0215,         0],
+   [-0.0372,   -0.0215,         0],
+   [-0.0372,    0.0215,         0],
+    ]
     label["SIR"] = SIR
     label["scale_dB"] = scale_dB
 
@@ -144,5 +157,7 @@ if __name__=='__main__':
 
     arr = list(range(n_data))
     with Pool(cpu_num) as p:
-        r = list(tqdm(p.imap(process, arr), total=len(arr),ascii=True,desc=str("processing : {}".format(args.config))))
+        r = list(tqdm(p.imap(process, arr), total=len(arr),ascii=True,desc=f"processing : {}".format(args.config)))
+
+
 

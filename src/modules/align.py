@@ -18,6 +18,9 @@ def compute_shift(x, y):
 
 
 def align(target,ref):
+    assert target.ndim == 2, "target.ndim != 2"
+    assert ref.ndim == 2, "ref.ndim != 2"
+
     tau = compute_shift(target[0,:],ref[0,:])
 
    # print("{} {} | {}".format(target.shape,ref.shape,tau))
@@ -28,7 +31,9 @@ def align(target,ref):
     if tau > 0 : 
         data_synced[:,tau:] = target[:,:n_sample-tau]
     else :
-        raise Exception("algin::tau < 0 not implemented")
+        #raise Exception("algin::tau < 0 not implemented")
+        print("ERROR: algin::tau < 0 not implemented")
+        return target
     
 
     return data_synced
