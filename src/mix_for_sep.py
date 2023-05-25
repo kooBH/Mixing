@@ -74,6 +74,10 @@ def process(idx):
 
         raw = align(raw,signal)
 
+        if raw is None :
+            print("ERROR: align failed, Skip this index : {}".format(idx))
+            return
+
         SIR = np.random.uniform(0,max_SIR)
 
         # Scaling : first src as reference

@@ -33,7 +33,7 @@ def align(target,ref):
     else :
         #raise Exception("algin::tau < 0 not implemented")
         print("ERROR: algin::tau < 0 not implemented")
-        return target
+        return None
     
 
     return data_synced
