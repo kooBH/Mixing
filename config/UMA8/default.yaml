@@ -1,20 +1,22 @@
 data : 
   #speech : ["/home/data2/kbh/DNS-Challenge/datasets_fullband/clean_fullband/"]
   speech : ["/home/nas/DB/CHiME4/data/audio/16kHz/isolated/tr05_org/"]
-  noise : []
+  noise : "/home/data2/kbh/UMA8_data/noise_seg/"
 ---
 audio :
   n_channel : 4
   sr : 16000
 ---
 RIR : 
-  root : "/home/data2/kbh/RIR_UMA8"
+  root : "/home/data2/kbh/RIR_UMA8/20230418"
 ---
 mix : 
   sec : 5
-  n_src : 2
+  min_src : 1
+  max_src : 2
   use_noise : False
   max_SIR  : 10
+  range_SNR : [-5,15]
   scale_dB : -35
   unreverbed_clean : False
 ---
@@ -23,3 +25,4 @@ dataset :
   ratio_train : 0.9
   ratio_dev : 0.05
   ratio_eval : 0.05
+

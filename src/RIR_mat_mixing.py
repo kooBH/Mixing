@@ -36,7 +36,8 @@ n_data = args.n_data
 
 list_speech = []
 n_sample = int(hp.mix.sec * hp.audio.sr)
-n_src = hp.mix.n_src
+min_src = hp.mix.min_src
+max_src = hp.mix.max_src
 max_SIR = hp.mix.max_SIR
 min_scale_dB = hp.mix.scale_dB
 sr = hp.audio.sr
@@ -57,7 +58,7 @@ print("noise : {}".format(len(list_noise)))
 def process(idx):
     np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
 
-    cur_src = np.random.randint(1,n_src+1)
+    cur_src = np.random.randint(min_src,max_src+1)
     
     ## RIR
     # select angles
@@ -67,6 +68,7 @@ def process(idx):
     signals = []
     raws = []
     angles = []
+
     #Speeches
     for i in range(cur_src) : 
         # (n_RIR,n_ch) == (65536,7)
@@ -118,11 +120,22 @@ def process(idx):
     ## Noise Mix
     if(hp.mix.use_noise) : 
         idx_noise = np.random.randint(0,len(list_noise))
+        path_noise = list_noise[idx_noise]
+
+        n, _ = rs.load(path_noise,sr=hp.audio.sr,mono=False)
+
+        i_nn = np.random.randint(0,n.shape[1]-n_sample)
+
+        n = n[[2,3,5,6],i_nn:i_nn+n_sample ]
 
         # SNR
+        SNR = np.random.uniform(hp.mix.range_SNR[0],hp.mix.range_SNR[1])
         speech_rms = np.sqrt(np.mean(x ** 2))
-        snr_scaler = ref_rms / (10 ** (SIR/20)) / (sig_rms + 1e-13)
-        noise *= snr_scaler
+        noise_rms = np.sqrt(np.mean(n **2))
+        snr_scaler = speech_rms / (10 ** (SNR/20)) / (noise_rms + 1e-13)
+        n *= snr_scaler
+
+        x += n
 
     # dB adjustment
     scale_dB = np.random.uniform(0,min_scale_dB)
@@ -156,6 +169,8 @@ def process(idx):
     ]
     label["SIR"] = SIR
     label["scale_dB"] = scale_dB
+    if(hp.mix.use_noise) : 
+        label["SNR"] = SNR
 
     # Save
     path_label = os.path.join(output_root,"label","{}.json".format(idx))
@@ -165,7 +180,12 @@ def process(idx):
     path_noisy= os.path.join(output_root,"noisy","{}.wav".format(idx))
     sf.write(path_noisy,x.T,sr)
 
-    for i in range(n_src) : 
+    if(hp.mix.use_noise) : 
+        path_noise= os.path.join(output_root,"noise","{}.wav".format(idx))
+        sf.write(path_noise,n[0,:],sr)
+
+
+    for i in range(cur_src) : 
         path_clean = os.path.join(output_root,"clean","{}_{}.wav".format(idx,i))
         if hp.mix.unreverbed_clean : 
             sf.write(path_clean,raws[i,0].T,sr)
@@ -178,6 +198,9 @@ if __name__=='__main__':
     for subdir in ["label","noisy","clean"] : 
         os.makedirs(os.path.join(output_root,subdir),exist_ok=True)
 
+    if(hp.mix.use_noise) :
+        os.makedirs(os.path.join(output_root,"noise"),exist_ok=True)
+    
     arr = list(range(n_data))
     with Pool(cpu_num) as p:
         r = list(tqdm(p.imap(process, arr), total=len(arr),ascii=True,desc=str("processing : {}".format(args.config))))
