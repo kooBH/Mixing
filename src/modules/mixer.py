@@ -107,7 +107,39 @@ def sample_audio(x,n_sample) :
         start = np.random.randint(0,left)
         x = x[start:start+n_sample]
         return x, start
+"""
+Modify the length of audio signal to n_sample
+with random start point and length
 
+args 
+    x : [ L ]
+    n_sample : total length of audio signal
+    min_sample : minimum length of audio signal
+
+return 
+    raw : [ n_sample ]
+    start_sample : start point of input in return
+    idx_sample : start point of input in original signal
+    len_sample : length of input in original signal
+
+
+
+"""    
+def distribute_audio(x,n_sample) : 
+    raw = np.zeros(n_sample)
+    
+    len_x = x.shape[0]
+    # len_x < n_sample
+    if len_x < n_sample :
+        shortage = n_sample - len_x
+        start = np.random.randint(0,shortage)
+        raw[start:start+len_x] = x
+        return raw, start, 0, len_x
+    # len_x >= n_sample
+    else :
+        start = np.random.randint(0,len_x-n_sample)
+        raw = x[start:start+n_sample]
+        return raw, 0, start, n_sample
 
 def manage_SNR() :
     pass

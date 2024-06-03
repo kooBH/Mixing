@@ -9,6 +9,7 @@ import random
 import json
 from moviepy.editor import *
 import cv2
+import torch
 
 # utils
 from tqdm.auto import tqdm
@@ -19,7 +20,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 from utils.hparams import HParam
-from modules.mixer import sample_audio, distribute_audio
+from modules.mixer import sample_audio
 from modules.align import align
 
 # param
@@ -38,12 +39,9 @@ n_data = args.n_data
 
 list_video = []
 n_sample = int(hp.mix.sec * hp.audio.sr)
-n_frame =  int(hp.mix.sec * hp.video.fps)
-a2v_ratio = hp.video.fps/hp.audio.sr
 min_src = hp.mix.min_src
 max_src = hp.mix.max_src
 max_SIR = hp.mix.max_SIR
-ratio_src = hp.mix.ratio_src
 min_scale_dB = hp.mix.scale_dB
 sr = hp.audio.sr
 n_ch = hp.audio.n_channel
@@ -62,11 +60,7 @@ print("noise : {}".format(len(list_noise)))
 
 def process(idx):
     np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
-
-    if len(ratio_src) == max_src : 
-        cur_src = int(np.random.choice(max_src,1,ratio_src)[0]+1)
-    else :
-        cur_src = np.random.randint(min_src,max_src+1)
+    cur_src = np.random.randint(min_src,max_src+1)
     
     ## RIR
     # select angles
@@ -77,16 +71,11 @@ def process(idx):
     raws = []
     angles = []
 
-    start_speech=[]
     idx_speech=[]
     len_speech=[]
 
-    start_face=[]
-    idx_face = []
-    len_face = []
-
+    n_frames = []
     id_videos = []
-    fps = []
     class_videos = []
 
     #videoes
@@ -99,47 +88,48 @@ def process(idx):
 
         RIR = io.loadmat(path)["ir"]
 
-        # NOTE : select cross part of UMA-8
+        # TODO : select cross part of UMA-8
         RIR = RIR[:,[2,3,5,6]]
 
         idx_src = np.random.randint(0,len(list_video))
 
-        # --- Managing Path & Name --- #
         # Load Video and Audio
         path_video = list_video[idx_src]
         video = VideoFileClip(path_video)
 
         # Get Video ID
+        # e.g. front_f007_02_f12_i0_0.mp4
         name_video = path_video.split("/")[-1]
-        class_video = path_video.split("/")[-2]
-        class_videos.append(class_video)
-
         id_video = name_video.split(".")[0]
         id_videos.append(id_video)
 
-        # --- Extracting --- #
+        # Get Audio
         audio = video.audio
+        raw = audio.to_soundarray()[:,0]
         sr = audio.fps
-        fps.append(int(sr))
-
-        """
-        https://github.com/Zulko/moviepy/issues/2025
-        "Arrays to stack must be passed as a sequence" in clip.to_soundarray for audio clips #2025
-        """
-        # raw = audio.to_soundarray()[:,0]
-
-        # Extract the audio as a list of samples
-        audio_samples = list(audio.iter_frames())
-        # Convert the list of samples to a NumPy array
-        raw = np.array(audio_samples)[:,0]
 
         # resample to target sr
-        raw = rs.resample(raw,orig_sr = sr,target_sr=hp.audio.sr)
+        raw = rs.resample(raw,sr,hp.audio.sr)
         sr = hp.audio.sr
 
-        # --- Sampling --- #
         len_prev = len(raw)
-        raw,start_sample, idx_sample, len_sample = distribute_audio(raw,n_sample)
+        raw,idx_start = sample_audio(raw,n_sample)
+
+        # adjust video to math audio
+        n_frame = video.reader.nframes
+
+        # padded
+        if idx_start == -1 :
+            len_speech.append(len_prev)
+        # cut
+        else :
+            ratio = len(raw) / len_prev
+            n_frame = int(np.ceil(n_frame * ratio))
+            len_speech.append(n_sample)
+
+        n_frames.append(n_frame)
+        idx_speech.append(idx_start)
+
 
         # RIR
         signal = []
@@ -150,35 +140,10 @@ def process(idx):
         signal = np.array(signal)
 
         raw = np.expand_dims(raw,0)
-        raw,tau = align(raw,signal)
+        raw = align(raw,signal)
         if raw is None :
             print("ERROR::Skip : {}".format(idx) )
             return
-
-        ## --- Video Info --- ##        
-        # adjust video to match audio
-        len_frame = video.reader.nframes
-
-        # Conversion : sample -> frame
-        len_frame = int(len_sample*a2v_ratio)
-        idx_frame = int(idx_sample*a2v_ratio)
-        start_frame = int(start_sample*a2v_ratio)
-
-        # face info
-        idx_face.append(idx_frame)
-        len_face.append(len_frame)
-        start_face.append(start_frame)
-
-        ## --- Speech Info --- ##
-        # adjust for tau
-        start_sample  = int(start_sample + tau)
-        idx_sample  = int(idx_sample + tau)
-        len_sample = int(len_sample + tau)
-
-        # speech info
-        len_speech.append(len_sample)
-        start_speech.append(start_sample)
-        idx_speech.append(idx_sample)
 
         SIR = np.random.uniform(0,max_SIR)
 
@@ -254,20 +219,11 @@ def process(idx):
     label["scale_dB"] = scale_dB
     if(hp.mix.use_noise) : 
         label["SNR"] = SNR
-    label["start_speech"] = start_speech
     label["idx_speech"] = idx_speech
     label["len_speech"] = len_speech
-    
-    label["start_face"] = start_face
-    label["idx_face"] = idx_face
-    label["len_face"] = len_face
-
+    label["n_frames"] = n_frames
     label["id_videos"] = id_videos
-    label["class_videos"] = class_videos
-
-    label["n_sample"] = n_sample
-    label["n_frame"] = n_frame
-    label["FPS"] = fps
+    label["n_sampe"] = n_sample
 
     # Save
     path_label = os.path.join(output_root,"label","{}.json".format(idx))
@@ -298,9 +254,8 @@ if __name__=='__main__':
         os.makedirs(os.path.join(output_root,"noise"),exist_ok=True)
     
     arr = list(range(n_data))
+#    with Pool(cpu_num) as p:
+ #       r = list(tqdm(p.imap(process, arr), total=len(arr),ascii=True,desc=str("processing : {}".format(args.config))))
 
-    with Pool(cpu_num) as p:
-        r = list(tqdm(p.imap(process, arr), total=len(arr),ascii=True,desc=str("processing : {}".format(args.config))))
-
-    #for i in tqdm(range(len(arr))) : 
-    #   process(i)
+    for i in tqdm(range(len(arr))) : 
+        process(i)
