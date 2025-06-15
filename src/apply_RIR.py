@@ -38,7 +38,6 @@ list_RIR = glob.glob(os.path.join(args.dir_rir,"*.mat"),recursive=True)
 
 # Apply RIR on every clean audio
 
-
 def apply_RIR(idx):
     path_video = list_clip[idx]
 

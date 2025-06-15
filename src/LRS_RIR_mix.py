@@ -161,6 +161,12 @@ def mix(idx):
     label = {}
     label["id_person"] = id_person
     label["id_spk"] = id_spk
+    label["mic_pos"] = [
+        [0.0372, 0.0215, 0],
+        [ 0.0372,-0.0215, 0],
+        [-0.0372,-0.0215, 0],
+        [-0.0372,0.0215, 0],
+    ]
     label["start_clean_audio"] = start_clean_audio
     label["length_clean_audio"] = length_clean_audio
     label["start_noisy_audio"] = start_noisy_audio

@@ -27,6 +27,7 @@ def align(target,ref):
 
     tau = compute_shift(target[0,:],ref[0,:])
 
+
    # print("{} {} | {}".format(target.shape,ref.shape,tau))
 
     n_sample = target.shape[-1]

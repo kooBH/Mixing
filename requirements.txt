@@ -1,0 +1,5 @@
+moviepy
+opencv-python
+librosa
+scipy
+pyyaml
